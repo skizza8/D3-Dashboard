@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Water Quality Dashboard</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css" />
+  <style>
+    /* Add your custom CSS styles here */
+    #map {
+      height: 600px;
+    }
+
+    .map-title {
+      background-color: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" href="index.html">Bar Chart</a>
+        </li>
+        <li class="nav-item active">
+          <a class="nav-link" href="map.html">Map</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="scatter.html">Scatter Plot</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+  <div class="container">
+    <h1>Water Quality Dashboard</h1>
+    <div>
+      <select id="parameter-select" onchange="updateMap()">
+        <option value="ecoli">Ecoli</option>
+        <option value="turbidity">Turbidity</option>
+        <option value="pH">pH</option>
+        <option value="sulphate">Sulphate</option>
+      </select>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
+  <script>
+    // Global variables
+    var data;
+    var currentParameter = "ecoli";
+    var map;
+    var heatmapLayer;
+    var mapTitle;
+    var lat;
+    var lon;
+    var heatmapData;
+
+    // Initialize the map
+    function initMap() {
+      // Create the Leaflet map
+      map = L.map('map').setView([1.2, 32.3], 7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+      }).addTo(map);
+    }
+
+    // Load data from data.csv and generate the map
+    d3.csv("data.csv").then(function (dataset) {
+      data = dataset;
+      initMap();
+      updateMap();
+    });
+
+    // Function to update the map based on the selected parameter
+    function updateMap() {
+      var parameter = d3.select("#parameter-select").node().value;
+      currentParameter = parameter;
+
+      // Process the data
+      processData(data, parameter).then(function (processedData) {
+        // Remove existing markers and heatmap layer
+        map.eachLayer(function (layer) {
+          if (layer instanceof L.Marker || layer instanceof L.CircleMarker || layer instanceof L.HeatLayer) {
+            map.removeLayer(layer);
+          }
+        });
+
+        // Remove existing map title
+        if (mapTitle) {
+          map.removeControl(mapTitle);
+        }
+
+        // Add markers to the map
+        var promises = processedData.map(function (d) {
+          return fetch('https://secure.geonames.org/searchJSON?name=' + encodeURIComponent(d.village) + '&country=UG&maxRows=1&username=skizza8', { rejectUnauthorized: false })
+            .then(function (response) {
+              return response.json();
+            })
+            .then(function (data) {
+              if (data.totalResultsCount > 0) {
+                lat = parseFloat(data.geonames[0].lat);
+                lon = parseFloat(data.geonames[0].lng);
+                var marker = L.marker([lat, lon]).addTo(map);
+                marker.bindPopup('<strong>' + d.village + '</strong><br>' + parameter + ': ' + d.value);
+              }
+            });
+        });
+
+        Promise.all(promises).then(function () {
+          // All markers have been added to the map
+
+          // Create an array of latlng values for the heatmap
+          heatmapData = processedData.map(function (d) {
+            return [parseFloat(d.latitude), parseFloat(d.longitude), d.value];
+          });
+
+          // Create the heatmap layer and add it to the map
+          heatmapLayer = L.heatLayer(heatmapData, { radius: 25, gradient: { 0.4: 'blue', 0.6: 'green', 1: 'red' } }).addTo(map);
+
+          // Add title to the map
+          var title = parameter.charAt(0).toUpperCase() + parameter.slice(1);
+          mapTitle = L.control({ position: 'topright' });
+          mapTitle.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'map-title');
+            div.innerHTML = '<h3>' + title + ' Quantity per Water Source</h3>';
+            return div;
+          };
+          mapTitle.addTo(map);
+        });
+      });
+    }
+
+    // Function to process the raw data
+    function processData(data, parameter) {
+      // Process the data here and return the processed data as an array of objects
+      return Promise.all(data.map(async function (d) {
+        const village = d.village;
+        const response = await fetch(
+          `https://secure.geonames.org/searchJSON?name=${encodeURIComponent(
+            village
+          )}&maxRows=1&username=skizza8`,
+          { rejectUnauthorized: false }
+        );
+        const geonamesData = await response.json();
+
+        if (geonamesData.totalResultsCount > 0) {
+          const latitude = parseFloat(geonamesData.geonames[0].lat);
+          const longitude = parseFloat(geonamesData.geonames[0].lng);
+          const value = +d[parameter];
+          return { village, latitude, longitude, value };
+        } else {
+          return { village, latitude: null, longitude: null, value: null };
+        }
+      }));
+    }
+  </script>
+</body>
+
+</html>

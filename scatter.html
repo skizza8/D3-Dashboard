@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Scatter Plot</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    /* Add your custom CSS styles here */
+  </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <a class="nav-link" href="index.html">Bar Chart</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="map.html">Map</a>
+            </li>
+            <li class="nav-item active">
+              <a class="nav-link" href="scatter.html">Scatter Plot</a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+  <div class="container">
+    <h1>Scatter Plot</h1>
+    <div>
+      <select id="x-parameter-select" onchange="updateChart()">
+        <option value="ecoli">Ecoli</option>
+        <option value="turbidity">Turbidity</option>
+        <option value="pH">pH</option>
+        <option value="sulphate">Sulphate</option>
+      </select>
+      <select id="y-parameter-select" onchange="updateChart()">
+        <option value="ecoli">Ecoli</option>
+        <option value="turbidity">Turbidity</option>
+        <option value="pH">pH</option>
+        <option value="sulphate">Sulphate</option>
+      </select>
+    </div>
+    <div id="chart-container">
+      <h2 id="chart-title"></h2>
+      <div id="scatter-plot"></div>
+    </div>
+  </div>
+
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script>
+    // Global variables
+    var data;
+    var currentXParameter = "ecoli";
+    var currentYParameter = "ecoli";
+
+    // Load data from data.csv
+    d3.csv("data.csv").then(function(dataset) {
+      data = dataset;
+      updateChart();
+    });
+
+    // Function to update the scatter plot based on the selected parameters
+    function updateChart() {
+      var xParameter = d3.select("#x-parameter-select").node().value;
+      var yParameter = d3.select("#y-parameter-select").node().value;
+      currentXParameter = xParameter;
+      currentYParameter = yParameter;
+
+      // Process the data
+      var processedData = processData(data, xParameter, yParameter);
+
+      // Set up chart dimensions
+      var margin = { top: 20, right: 20, bottom: 50, left: 50 };
+      var width = 800 - margin.left - margin.right;
+      var height = 400 - margin.top - margin.bottom;
+
+      // Remove existing SVG element
+      d3.select("#scatter-plot").select("svg").remove();
+
+      // Create SVG element
+      var svg = d3.select("#scatter-plot")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+      // Define scales
+      var xScale = d3.scaleLinear()
+        .domain([0, d3.max(processedData, function(d) { return d.xValue; })])
+        .range([0, width]);
+
+      var yScale = d3.scaleLinear()
+        .domain([0, d3.max(processedData, function(d) { return d.yValue; })])
+        .range([height, 0]);
+
+      // Draw points
+      var points = svg.selectAll(".point")
+        .data(processedData);
+
+      points.enter()
+        .append("circle")
+        .attr("class", "point")
+        .merge(points)
+        .attr("cx", function(d) { return xScale(d.xValue); })
+        .attr("cy", function(d) { return yScale(d.yValue); })
+        .attr("r", 5)
+        .attr("fill", function(d) { return d.color; })
+        .on("mouseover", function(d) {
+          d3.select(this)
+            .attr("opacity", 0.7)
+            .attr("stroke", "black")
+            .attr("stroke-width", 1);
+          showPointValue(d);
+        })
+        .on("mouseout", function(d) {
+          d3.select(this)
+            .attr("opacity", 1)
+            .attr("stroke", "none");
+          hidePointValue();
+        });
+
+      points.exit().remove();
+
+      // Add x-axis
+      svg.append("g")
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(xScale));
+
+      // Add y-axis
+      svg.append("g")
+        .call(d3.axisLeft(yScale));
+
+      // Update chart title
+      var chartTitle = getChartTitle(xParameter, yParameter);
+      d3.select("#chart-title")
+        .text(chartTitle);
+
+      // Update x-axis label
+      var xAxisLabel = getAxisLabel(xParameter);
+      svg.append("text")
+        .attr("class", "x-axis-label")
+        .attr("x", width / 2)
+        .attr("y", height + margin.bottom)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text(xAxisLabel);
+
+      // Update y-axis label
+      var yAxisLabel = getAxisLabel(yParameter);
+      svg.append("text")
+        .attr("class", "y-axis-label")
+        .attr("transform", "rotate(-90)")
+        .attr("x", 0 - (height / 2))
+        .attr("y", 0 - margin.left)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text(yAxisLabel);
+    }
+
+    // Function to process the raw data
+    function processData(data, xParameter, yParameter) {
+      // Process the data here and return an array of objects with xValue, yValue, and color properties
+      return data.map(function(d) {
+        return {
+          xValue: +d[xParameter],
+          yValue: +d[yParameter],
+          color: "#3498db" // Change the color as needed
+        };
+      });
+    }
+
+    // Function to get the chart title based on the parameters
+    function getChartTitle(xParameter, yParameter) {
+      // Return the chart title based on the parameters
+      // Modify as needed
+      var xAxisLabel = getAxisLabel(xParameter);
+      var yAxisLabel = getAxisLabel(yParameter);
+      return "Scatter Plot: " + xAxisLabel + " vs " + yAxisLabel;
+    }
+
+    // Function to get the axis label based on the parameter
+    function getAxisLabel(parameter) {
+      // Return the axis label based on the parameter
+      // Modify as needed
+      switch (parameter) {
+        case "ecoli":
+          return "Ecoli";
+        case "turbidity":
+          return "Turbidity";
+        case "pH":
+          return "pH";
+        case "sulphate":
+          return "Sulphate";
+        default:
+          return "";
+      }
+    }
+
+    // Function to show the value of a point on hover
+    function showPointValue(data) {
+      // Modify as needed
+      var valueText = "X: " + data.xValue + ", Y: " + data.yValue;
+
+      d3.select("#chart-container")
+        .append("div")
+        .attr("class", "point-value")
+        .text(valueText);
+    }
+
+    // Function to hide the value of a point on hover
+    function hidePointValue() {
+      d3.select(".point-value").remove();
+    }
+  </script>
+</body>
+</html>
